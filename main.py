@@ -2,86 +2,114 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 import generador
-from entorno import CityTrafficLightsEnv
+from entorno import CityMultiAgentEnv
+
+
+def get_action(state, q_table, epsilon, env):
+    if random.uniform(0, 1) < epsilon:
+        return env.action_space.sample()
+    else:
+        if state not in q_table:
+            q_table[state] = np.zeros(env.action_space.n)
+        return np.argmax(q_table[state])
+
 
 if __name__ == "__main__":
 
-    print("🏗️  Generando ciudad con tráfico aleatorio...")
-    mapa_creado = generador.generate_map()
+    print("🏗️  Construyendo ciudad (30x30) con tráfico fijo y sistema logístico...")
+    mapa = generador.generate_map()
 
-    env = CityTrafficLightsEnv(mapa_generado=mapa_creado)
+    # 2 Agentes Repartidores
+    env = CityMultiAgentEnv(mapa, n_agentes=2)
 
     q_table = {}
 
-    episodes = 8000
-    alpha = 0.2
+    # EPISODIOS ALTOS (El mapa es muy grande)
+    episodes = 10000  # cambiar para
+
+    alpha = 0.1
     gamma = 0.95
+
     epsilon = 1.0
-    epsilon_decay = 0.9994
+    epsilon_decay = 0.9996
     min_epsilon = 0.05
 
-    print(f"🚦 Entrenando IA (Adaptación a cambios de ruta)...")
+    print(f"🚦 Entrenando flota en mapa gigante...")
 
     for i in range(episodes):
-        state, _ = env.reset()
+        states, _ = env.reset()
         done = False
         steps = 0
 
-        while not done and steps < 250:
-            if state not in q_table:
-                q_table[state] = np.zeros(env.action_space.n)
+        while not done and steps < 600:  # Más pasos permitidos
+            actions = []
 
-            if random.uniform(0, 1) < epsilon:
-                action = env.action_space.sample()
-            else:
-                action = np.argmax(q_table[state])
+            for idx in range(env.n_agentes):
+                state = states[idx]
+                action = get_action(state, q_table, epsilon, env)
+                actions.append(action)
 
-            next_state, reward, terminated, _, _ = env.step(action)
+            next_states, rewards, terminated, _, _ = env.step(actions)
             done = terminated
 
-            if next_state not in q_table:
-                q_table[next_state] = np.zeros(env.action_space.n)
+            for idx in range(env.n_agentes):
+                state = states[idx]
+                action = actions[idx]
+                reward = rewards[idx]
+                next_state = next_states[idx]
 
-            old_value = q_table[state][action]
-            next_max = np.max(q_table[next_state])
+                if next_state not in q_table:
+                    q_table[next_state] = np.zeros(env.action_space.n)
+                if state not in q_table:
+                    q_table[state] = np.zeros(env.action_space.n)
 
-            new_value = old_value + alpha * \
-                (reward + gamma * next_max - old_value)
-            q_table[state][action] = new_value
+                old_val = q_table[state][action]
+                next_max = np.max(q_table[next_state])
 
-            state = next_state
+                q_table[state][action] = old_val + alpha * \
+                    (reward + gamma * next_max - old_val)
+
+            states = next_states
             steps += 1
 
         if epsilon > min_epsilon:
             epsilon *= epsilon_decay
 
         if (i+1) % 1000 == 0:
-            print(f"Episodio {i+1} completado. Epsilon: {epsilon:.2f}")
+            print(f"Episodio {i+1} | Epsilon: {epsilon:.2f}")
 
     print("✅ Entrenamiento completado.")
 
     # DEMOSTRACIÓN
-    print("\n🚚 MOSTRANDO RUTA...")
+    print("\n🚚 MOSTRANDO FLOTA...")
     input("Presiona Enter...")
 
-    state, _ = env.reset()
+    states, _ = env.reset()
     done = False
     pasos = 0
+    epsilon = 0
 
-    while not done and pasos < 300:
+    while not done and pasos < 800:
         env.render()
 
-        if state in q_table:
-            action = np.argmax(q_table[state])
-        else:
-            action = env.action_space.sample()
+        actions = []
+        for idx in range(env.n_agentes):
+            state = states[idx]
+            if state in q_table:
+                action = np.argmax(q_table[state])
+            else:
+                action = env.action_space.sample()
+            actions.append(action)
 
-        state, reward, terminated, _, _ = env.step(action)
+        states, rewards, terminated, _, _ = env.step(actions)
         done = terminated
         pasos += 1
 
+        import time
+        time.sleep(0.02)
+
         if terminated:
             env.render()
-            print(f"\n🏆 ¡Ruta completada en {pasos} pasos!")
+            print(f"\n🏆 ¡Trabajo completado en {pasos} pasos!")
             plt.ioff()
             plt.show()
