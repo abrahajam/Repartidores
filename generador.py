@@ -125,7 +125,7 @@ def generate_map():
     remove_dead_ends(grid)
 
     doors = 0
-    while doors < 3:
+    while doors < 6:
         x, y = random.randint(1, WIDTH-2), random.randint(1, HEIGHT-2)
         if grid[y][x] == BUILDING:
             if any(grid[y+dy][x+dx] == ROAD_NORMAL for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]):
